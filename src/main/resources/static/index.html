@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FilmInfo</title>
+
+  <meta name="description" content="Special service that provides information about the world-famous films.">
+  <meta name="keywords" content="film, info, filminfo, hollywood">
+
+  <!-- Favicon -->
+  <link rel="shortcut icon" href="images/fav.png">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="114x114" href="images/apple-touch-icon-114x114.png">
+  <link rel="apple-touch-icon" sizes="72x72" href="images/apple-touch-icon-72x72.png">
+  <link rel="apple-touch-icon" sizes="144x144" href="images/apple-touch-icon-144x144.png">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Scripts -->
+  <script src="js/main.js"></script>
+</head>
+<body>
+
+
+  <div class="wrapper">
+    <form class="form" action="/film">
+      <div class="form__column">
+        <div class="form__row form__row--with-header">
+          Запит
+        </div>
+
+        <div class="form__row form__row--with-text">
+          Ви маєте можливість отримати інформацію про фільм, вказавши його назву (повністю або частково), рік (опціонально) або IMDb ID.
+        </div>
+
+        <div class="form__row">
+          <fieldset class="form__fieldset">
+            <legend class="form__legend">За назвою</legend>
+            <label class="form__label">
+              Назва
+              <input class="form__input" type="text" name="title" placeholder="Повна або часткова">
+            </label>
+  
+            <label class="form__label">
+              Рік випуску
+              <input class="form__input" type="text" name="year" placeholder="рррр">
+            </label>
+
+            <label class="form__label">
+              Співпадіння
+              <select class="form__input" name="plot">
+                <option value="short" selected>Часткове</option>
+                <option value="full">Повне</option>
+              </select>
+            </label>
+          </fieldset>
+
+          <fieldset class="form__fieldset">
+            <legend class="form__legend">За ID</legend>
+            <label class="form__label">
+              ID
+              <input class="form__input" type="text" name="id" placeholder="IMDb ID">
+            </label>
+          </fieldset>
+        </div>
+
+        <div class="form__row">
+          <label class="form__label">
+            Формат відповіді
+            <select class="form__input" name="format">
+              <option value="json" selected>JSON</option>
+              <option value="xml">XML</option>
+              <option value="docx">Документ</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form__row form__row--with-controls">
+          <button class="form__button" type="submit">Надіслати</button>
+          <button class="form__button" type="reset">Очистити</button>
+        </div>
+      </div>
+
+      <div class="form__column form__column--with-image">
+        <img class="form__image" src="images/clapperboard.png" alt="clapperboard">
+      </div>
+    </form>
+  </div>
+
+</body>
+</html>

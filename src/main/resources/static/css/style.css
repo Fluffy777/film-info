@@ -1,0 +1,122 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-size: 20px;
+}
+
+.wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.form {
+  display: flex;
+
+  margin: 25px 35px;
+  padding: 15px;
+
+  border: 2px solid gray;
+}
+
+.form__column {
+  padding: 15px 25px;
+}
+
+.form__column--with-image {
+  display: flex;
+  align-items: center;
+  background: lightgray;
+  border: 2px solid gray;
+}
+
+.form__row {
+  display: flex;
+}
+
+.form__row + .form__row {
+  margin-top: 15px;
+}
+
+.form__row--with-header {
+  display: block;
+  font-weight: 700;
+  font-size: 160%;
+  text-align: center;
+}
+
+.form__row--with-controls {
+  justify-content: space-around;
+}
+
+.form__row--with-text {
+  max-width: 725px;
+}
+
+.form__image {
+  width: 192px;
+  height: 192px;
+}
+
+.form__fieldset {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid gray;
+  padding: 10px 15px;
+}
+
+.form__fieldset + .form__fieldset {
+  margin-left: 15px;
+}
+
+.form__legend {
+  padding: 5px 8px;
+}
+
+.form__label {
+  display: flex;
+  justify-content: space-between;
+}
+
+.form__label + .form__label {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid gray;
+}
+
+.form__input {
+  display: block;
+  font-size: inherit;
+  margin-left: 15px;
+  padding: 5px 8px;
+}
+
+.form__input[date-name="title"] {
+  width: 260px;
+}
+
+.form__input[date-name="year"] {
+  width: 130px;
+}
+
+.form__input[date-name="id"] {
+  width: 260px;
+}
+
+.form__input[date-name="plot"] {
+  width: 130px;
+}
+
+.form__button {
+  min-width: 100px;
+  padding: 7px 14px;
+  font-size: inherit;
+}
+
+.form__fieldset--selected {
+  border: 3px solid green;
+}
+
+/* адаптивність */
+
