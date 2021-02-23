@@ -1,15 +1,15 @@
 package com.fluffy.exceptions;
 
 /**
- * Клас винятку, що виникає в результаті невказання обов'язкового параметра
- * під час відправки запиту.
+ * Клас винятку, що виникає в результаті спроби використання непідтримуваного
+ * розширення зображення в якості постера.
  * @author Сивоконь Вадим
  */
-public class PrimaryRequestParamOmitedException extends RequestParamException {
+public class BadPosterExtensionException extends Exception {
     /**
      * Створює об'єкт винятку.
      */
-    public PrimaryRequestParamOmitedException() {
+    public BadPosterExtensionException() {
         super();
     }
 
@@ -17,7 +17,7 @@ public class PrimaryRequestParamOmitedException extends RequestParamException {
      * Створює об'єкт винятку із можливістю збереження текстового повідомлення
      * @param message текстове повідомлення
      */
-    public PrimaryRequestParamOmitedException(String message) {
+    public BadPosterExtensionException(String message) {
         super(message);
     }
 
@@ -27,7 +27,7 @@ public class PrimaryRequestParamOmitedException extends RequestParamException {
      * @param message текстове повідомлення
      * @param cause більш точна причина виключення
      */
-    public PrimaryRequestParamOmitedException(String message, Throwable cause) {
+    public BadPosterExtensionException(String message, Throwable cause) {
         super(message, cause);
     }
 }

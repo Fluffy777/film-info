@@ -3,28 +3,44 @@ package com.fluffy.services;
 import com.fluffy.dtos.FilmDTO;
 import com.fluffy.dtos.GetFilmDataRequest;
 import com.fluffy.dtos.ImageDTO;
-import com.fluffy.exceptions.*;
+import com.fluffy.exceptions.BadPosterExtensionException;
+import com.fluffy.exceptions.FilmServiceException;
+import com.fluffy.exceptions.NoDataFoundException;
+import com.fluffy.exceptions.RedundantRequestParamException;
+import com.fluffy.exceptions.RequestParamInvalidValueException;
+import com.fluffy.exceptions.RequestParamOmitedException;
+import com.fluffy.exceptions.RequestParamsConflictException;
 import com.fluffy.util.RequestParamMapper;
 import com.fluffy.util.URLBuilder;
 import com.fluffy.util.XWPFDocumentManipulator;
 import org.apache.poi.util.IOUtils;
-import org.apache.poi.xwpf.usermodel.*;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFTable;
+import org.apache.poi.xwpf.usermodel.XWPFTableCell;
+import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.apache.xmlbeans.XmlException;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
 import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import  org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
-import java.util.*;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -34,30 +50,395 @@ import java.util.concurrent.CompletableFuture;
  */
 @Service
 public class FilmService {
-    private final String DATA_SOURCE_PROTOCOL;
-    private final String DATA_SOURCE_HOST;
-    private final String DATA_SOURCE_API_KEY;
-    private final String DATA_SOURCE_QUERY_KEY_TITLE;
-    private final String DATA_SOURCE_QUERY_KEY_YEAR;
-    private final String DATA_SOURCE_QUERY_KEY_PLOT;
-    private final String DATA_SOURCE_QUERY_KEY_FORMAT;
-    private final String DATA_SOURCE_QUERY_KEY_ID;
-    private final String DATA_SOURCE_QUERY_KEY_API_KEY;
+    /**
+     * Протокол для отримання даних від джерела.
+     */
+    private final String dataSourceProtocol;
 
-    private final String APPLICATION_PROTOCOL;
-    private final String APPLICATION_HOST;
-    private final String APPLICATION_QUERY_KEY_TITLE;
-    private final String APPLICATION_QUERY_KEY_YEAR;
-    private final String APPLICATION_QUERY_KEY_PLOT;
-    private final String APPLICATION_QUERY_KEY_FORMAT;
-    private final String APPLICATION_QUERY_KEY_ID;
+    /**
+     * Доменне ім'я джерела та порт (опціонально).
+     */
+    private final String dataSourceHost;
 
-    private final String TEMPLATE_FILENAME = "Template.docx";
+    /**
+     * Ключ до API джерела даних.
+     */
+    private final String dataSourceApiKey;
+
+    /**
+     * Ключ для вказання назви фільму (для джерела даних).
+     */
+    private final String dataSourceQueryKeyTitle;
+
+    /**
+     * Ключ для вказання року випуску (для джерела даних).
+     */
+    private final String dataSourceQueryKeyYear;
+
+    /**
+     * Ключ для вказання режиму відображення сюжету (для джерела даних).
+     */
+    private final String dataSourceQueryKeyPlot;
+
+    /**
+     * Ключ для вказання формату відповіді (для джерела даних).
+     */
+    private final String dataSourceQueryKeyFormat;
+
+    /**
+     * Ключ для вказання IMDb ID (для джерела даних).
+     */
+    private final String dataSourceQueryKeyId;
+
+    /**
+     * Ключ для вказання ключа до API (для джерела даних).
+     */
+    private final String dataSourceQueryKeyApiKey;
+
+    /**
+     * Протокол для отримання даних від додатка.
+     */
+    private final String applicationProtocol;
+
+    /**
+     * Доменне ім'я сервера та порт (опціонально).
+     */
+    private final String applicationHost;
+
+    /**
+     * Ключ для вказання назви фільму (для додатку).
+     */
+    private final String applicationQueryKeyTitle;
+
+    /**
+     * Ключ для вказання року випуску (для додатку).
+     */
+    private final String applicationQueryKeyYear;
+
+    /**
+     * Ключ для вказання режиму відображення сюжету (для додатку).
+     */
+    private final String applicationQueryKeyPlot;
+
+    /**
+     * Ключ для вказання формату відповіді (для додатку).
+     */
+    private final String applicationQueryKeyFormat;
+
+    /**
+     * Ключ для вказання IMDb ID (для додатку).
+     */
+    private final String applicationQueryKeyId;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає результат опрацювання запиту.
+     */
+    private final String jsonKeyResponse;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає тип об'єкта.
+     */
+    private final String jsonKeyType;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає назву фільму.
+     */
+    private final String jsonKeyTitle;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає рік випуску фільму.
+     */
+    private final String jsonKeyYear;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає IMDb ID.
+     */
+    private final String jsonKeyImdbId;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає рейтинг вмісту.
+     */
+    private final String jsonKeyRated;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає тривалість фільму.
+     */
+    private final String jsonKeyRuntime;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає жанр фільму.
+     */
+    private final String jsonKeyGenre;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає дату випуску.
+     */
+    private final String jsonKeyReleased;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає сюжет.
+     */
+    private final String jsonKeyPlot;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає URL-посилання на постер.
+     */
+    private final String jsonKeyPoster;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає директора.
+     */
+    private final String jsonKeyDirector;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає сценариста.
+     */
+    private final String jsonKeyWriter;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає акторів.
+     */
+    private final String jsonKeyActors;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає мову фільму.
+     */
+    private final String jsonKeyLanguage;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає країну-виробника фільму.
+     */
+    private final String jsonKeyCountry;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає отримані нагороди.
+     */
+    private final String jsonKeyAwards;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає студію - виробника фільму.
+     */
+    private final String jsonKeyProduction;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає касові збори.
+     */
+    private final String jsonKeyBoxOffice;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає рейтинг від www.metacritic.com.
+     */
+    private final String jsonKeyMetascore;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає рейтинг від www.imdb.com.
+     */
+    private final String jsonKeyImdbRating;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає рейтинг від www.imdb.com.
+     */
+    private final String jsonKeyImdbVotes;
+
+    /**
+     * Назва поля JSON-об'єкта, що зберігає рейтинги на різних ресурсах.
+     */
+    private final String jsonKeyRatings;
+
+    /**
+     * Назва поля JSON-об'єкта (описує елемент із рейтингом), що зберігає назву
+     * джерела.
+     */
+    private final String jsonRatingSourceKeySource;
+
+    /**
+     * Назва поля JSON-об'єкта (описує елемент із рейтингом), що зберігає
+     * значення оцінки на відповідному джерелі.
+     */
+    private final String jsonRatingSourceKeyValue;
+
+    /**
+     * Значення поля JSON-об'єкта за замовченням.
+     */
+    private final String jsonValueDefaultStringField;
+
+    /**
+     * Значення поля Response на випадок невдачі під час отримання даних.
+     */
+    private final String jsonValueBadResponse;
+
+    /**
+     * Назва поля в шаблоні для збереження типу контенту.
+     */
+    private final String docxFieldType;
+
+    /**
+     * Назва поля в шаблоні для збереження назви фільму.
+     */
+    private final String docxFieldTitle;
+
+    /**
+     * Назва поля в шаблоні для збереження року випуску фільму.
+     */
+    private final String docxFieldYear;
+
+    /**
+     * Назва поля в шаблоні для збереження IMDb ID.
+     */
+    private final String docxFieldImdbID;
+
+    /**
+     * Назва поля в шаблоні для збереження сюжету.
+     */
+    private final String docxFieldPlot;
+
+    /**
+     * Назва поля в шаблоні для збереження URL-посилання на постер.
+     */
+    private final String docxFieldPoster;
+
+    /**
+     * Назва поля в шаблоні для збереження рейтингу вмісту.
+     */
+    private final String docxFieldRated;
+
+    /**
+     * Назва поля в шаблоні для збереження тривалості фільму.
+     */
+    private final String docxFieldRuntime;
+
+    /**
+     * Назва поля в шаблоні для збереження жанру фільму.
+     */
+    private final String docxFieldGenre;
+
+    /**
+     * Назва поля в шаблоні для збереження дати випуску.
+     */
+    private final String docxFieldReleased;
+
+    /**
+     * Назва поля в шаблоні для збереження директора.
+     */
+    private final String docxFieldDirector;
+
+    /**
+     * Назва поля в шаблоні для збереження сценариста.
+     */
+    private final String docxFieldWriter;
+
+    /**
+     * Назва поля в шаблоні для збереження акторів.
+     */
+    private final String docxFieldActors;
+
+    /**
+     * Назва поля в шаблоні для збереження мови фільму.
+     */
+    private final String docxFieldLanguage;
+
+    /**
+     * Назва поля в шаблоні для збереження країни-виробника.
+     */
+    private final String docxFieldCountry;
+
+    /**
+     * Назва поля в шаблоні для збереження нагород.
+     */
+    private final String docxFieldAwards;
+
+    /**
+     * Назва поля в шаблоні для збереження студії - виробника фільму.
+     */
+    private final String docxFieldProduction;
+
+    /**
+     * Назва поля в шаблоні для збереження касових зборів.
+     */
+    private final String docxFieldBoxOffice;
+
+    /**
+     * Назва поля в шаблоні для збереження рейтингу на www.metacritic.com.
+     */
+    private final String docxFieldMetascore;
+
+    /**
+     * Назва поля в шаблоні для збереження рейтингу на www.imdb.com.
+     */
+    private final String docxFieldImdbRating;
+
+    /**
+     * Назва поля в шаблоні для збереження кількості голосів на www.imdb.com.
+     */
+    private final String docxFieldImdbVotes;
+
+    /**
+     * Назва поля в шаблоні для збереження автора файлу.
+     */
+    private final String docxFieldAuthor;
+
+    /**
+     * Назва поля в шаблоні для збереження поточного року.
+     */
+    private final String docxFieldCurrentYear;
+
+    /**
+     * Назва додатка.
+     */
+    private final String applicationName;
+
+    /**
+     * Назва файлу-шаблона для генерації документів.
+     */
+    private final String templateFilename;
+
+    /**
+     * Текст-зачіпка для можливості отримати посилання на рейтингову таблицю.
+     */
+    private final String ratingsTableAnchor;
+
+    /**
+     * Назва постера в межах документа.
+     */
+    private final String posterName;
+
+    /**
+     * Назва файла, що замінює постер на випадок його відсутності.
+     */
+    private final String noPosterImage;
+
+    /**
+     * Словник для встановлення відповідності між розширеннями файлів зображень
+     * та їх представленням у вигляді цілого числа.
+     */
+    private final Map<String, Integer> imageFormatMapper;
 
     /**
      * Загальний опис проблеми, пов'язаної із некоректними вхідними даними.
      */
-    private final String EXCEPTION_MESSAGE_BAD_INPUT = "Некоректні вхідні дані";
+    private final String exceptionMessageBadInput;
+
+    /**
+     * Опис проблеми, пов'язаною із невдачою під час отримки даних.
+     */
+    private final String exceptionMessageDataGatheringFailed;
+
+    /**
+     * Опис проблеми, пов'язаної із відсутністю даних за значеннями параметрів
+     * запиту.
+     */
+    private final String exceptionMessageNoDataFound;
+
+    /**
+     * Опис проблеми, пов'язаної із внутрішньою проблемою, що виникла в додатку
+     * (помилка парсингу XML, не знайдений файл та ін.).
+     */
+    private final String exceptionMessageApplicationInnerException;
+
+    /**
+     * Опис проблеми, що пов'язана із непідтримуваним розширенням файлу зображення.
+     */
+    private final String exceptionMessageBadPosterExtension;
 
     /**
      * Бін, що використовується для отримання змінних оточення, визначених у
@@ -72,42 +453,101 @@ public class FilmService {
      */
     private final RequestParamMapper requestParamMapper;
 
+    /**
+     * Бін, що необхідний для можливості отримання даних за допомогою URL-
+     * адреси.
+     */
     private final RestTemplate restTemplate;
 
     /**
-     * Створює об'єкт (бін) сервіса.
+     * Створює бін сервіса.
      * @param env бін для отримання змінних із application.properties
      * @param requestParamMapper бін для співставлення звернень до API
+     * @param restTemplate бін для отримання даних за допомогою URL-адреси
      */
-    public FilmService(Environment env, RequestParamMapper requestParamMapper, RestTemplate restTemplate) {
+    public FilmService(final Environment env, final RequestParamMapper requestParamMapper, final RestTemplate restTemplate) {
         this.env = env;
         this.requestParamMapper = requestParamMapper;
         this.restTemplate = restTemplate;
-        APPLICATION_QUERY_KEY_TITLE = env.getProperty("application.api.param.title");
-        APPLICATION_QUERY_KEY_YEAR = env.getProperty("application.api.param.year");
-        APPLICATION_QUERY_KEY_PLOT = env.getProperty("application.api.param.plot");
-        APPLICATION_QUERY_KEY_FORMAT = env.getProperty("application.api.param.format");
-        APPLICATION_QUERY_KEY_ID = env.getProperty("application.api.param.id");
-        APPLICATION_PROTOCOL = env.getProperty("application.protocol");
-        APPLICATION_HOST = env.getProperty("application.host");
 
+        // константи для використання API додатку
+        applicationQueryKeyTitle = env.getProperty("application.api.param.title");
+        applicationQueryKeyYear = env.getProperty("application.api.param.year");
+        applicationQueryKeyPlot = env.getProperty("application.api.param.plot");
+        applicationQueryKeyFormat = env.getProperty("application.api.param.format");
+        applicationQueryKeyId = env.getProperty("application.api.param.id");
+        applicationProtocol = env.getProperty("application.protocol");
+        applicationHost = env.getProperty("application.host");
 
-        // даний Bean є singleton, оскільки таке його визначення за
-        // замовчуванням, тому немає сенсу зберігати константи у
-        // вигляді статичних фіналізованих змінних
-        DATA_SOURCE_QUERY_KEY_TITLE = requestParamMapper.mapParam(APPLICATION_QUERY_KEY_TITLE);
-        DATA_SOURCE_QUERY_KEY_YEAR = requestParamMapper.mapParam(APPLICATION_QUERY_KEY_YEAR);
-        DATA_SOURCE_QUERY_KEY_PLOT = requestParamMapper.mapParam(APPLICATION_QUERY_KEY_PLOT);
-        DATA_SOURCE_QUERY_KEY_FORMAT = requestParamMapper.mapParam(APPLICATION_QUERY_KEY_FORMAT);
-        DATA_SOURCE_QUERY_KEY_ID = requestParamMapper.mapParam(APPLICATION_QUERY_KEY_ID);
+        // константи для використання API джерела даних
+        dataSourceQueryKeyTitle = requestParamMapper.mapParam(applicationQueryKeyTitle);
+        dataSourceQueryKeyYear = requestParamMapper.mapParam(applicationQueryKeyYear);
+        dataSourceQueryKeyPlot = requestParamMapper.mapParam(applicationQueryKeyPlot);
+        dataSourceQueryKeyFormat = requestParamMapper.mapParam(applicationQueryKeyFormat);
+        dataSourceQueryKeyId = requestParamMapper.mapParam(applicationQueryKeyId);
+        dataSourceQueryKeyApiKey = env.getProperty("application.data-source.api.param.api-key");
+        dataSourceProtocol = env.getProperty("application.data-source.protocol");
+        dataSourceHost = env.getProperty("application.data-source.host");
+        dataSourceApiKey = env.getProperty("application.data-source.api-key");
 
-        // додаток не вимагає використання api-key, тому співставлення не є необхідністю
-        DATA_SOURCE_QUERY_KEY_API_KEY = env.getProperty("application.data-source.api.param.api-key");
+        // можливі оброблювані ключі отримуваних JSON-об'єктів
+        jsonKeyResponse = env.getProperty("application.data-source.json.key.response");
+        jsonKeyType = env.getProperty("application.data-source.json.key.type");
+        jsonKeyTitle = env.getProperty("application.data-source.json.key.title");
+        jsonKeyYear = env.getProperty("application.data-source.json.key.year");
+        jsonKeyImdbId = env.getProperty("application.data-source.json.key.imdb-id");
+        jsonKeyRated = env.getProperty("application.data-source.json.key.rated");
+        jsonKeyRuntime = env.getProperty("application.data-source.json.key.runtime");
+        jsonKeyGenre = env.getProperty("application.data-source.json.key.genre");
+        jsonKeyReleased = env.getProperty("application.data-source.json.key.released");
+        jsonKeyPlot = env.getProperty("application.data-source.json.key.plot");
+        jsonKeyPoster = env.getProperty("application.data-source.json.key.poster");
+        jsonKeyDirector = env.getProperty("application.data-source.json.key.director");
+        jsonKeyWriter = env.getProperty("application.data-source.json.key.writer");
+        jsonKeyActors = env.getProperty("application.data-source.json.key.actors");
+        jsonKeyLanguage = env.getProperty("application.data-source.json.key.language");
+        jsonKeyCountry = env.getProperty("application.data-source.json.key.country");
+        jsonKeyAwards = env.getProperty("application.data-source.json.key.awards");
+        jsonKeyProduction = env.getProperty("application.data-source.json.key.production");
+        jsonKeyBoxOffice = env.getProperty("application.data-source.json.key.box-office");
+        jsonKeyMetascore = env.getProperty("application.data-source.json.key.metascore");
+        jsonKeyImdbRating = env.getProperty("application.data-source.json.key.imdb-rating");
+        jsonKeyImdbVotes = env.getProperty("application.data-source.json.key.imdb-votes");
+        jsonKeyRatings = env.getProperty("application.data-source.json.key.ratings");
+        jsonRatingSourceKeySource = env.getProperty("application.data-source.json.key.ratings.source.source");
+        jsonRatingSourceKeyValue = env.getProperty("application.data-source.json.key.ratings.source.value");
 
-        DATA_SOURCE_PROTOCOL = env.getProperty("application.data-source.protocol");
-        DATA_SOURCE_HOST = env.getProperty("application.data-source.host");
-        DATA_SOURCE_API_KEY = env.getProperty("application.data-source.api-key");
+        // деякі особливі значення для JSON-об'єктів
+        jsonValueDefaultStringField = env.getProperty("application.data-source.json.value.default-string-field");
+        jsonValueBadResponse = env.getProperty("application.data-source.json.value.bad-response");
 
+        // назви полів, що зберігає документ-шаблон
+        docxFieldType = env.getProperty("application.document-template.field.type");
+        docxFieldTitle = env.getProperty("application.document-template.field.title");
+        docxFieldYear = env.getProperty("application.document-template.field.year");
+        docxFieldImdbID = env.getProperty("application.document-template.field.imdbID");
+        docxFieldPlot = env.getProperty("application.document-template.field.plot");
+        docxFieldPoster = env.getProperty("application.document-template.field.poster");
+        docxFieldRated = env.getProperty("application.document-template.field.rated");
+        docxFieldRuntime = env.getProperty("application.document-template.field.runtime");
+        docxFieldGenre = env.getProperty("application.document-template.field.genre");
+        docxFieldReleased = env.getProperty("application.document-template.field.released");
+        docxFieldDirector = env.getProperty("application.document-template.field.director");
+        docxFieldWriter = env.getProperty("application.document-template.field.writer");
+        docxFieldActors = env.getProperty("application.document-template.field.actors");
+        docxFieldLanguage = env.getProperty("application.document-template.field.language");
+        docxFieldCountry = env.getProperty("application.document-template.field.country");
+        docxFieldAwards = env.getProperty("application.document-template.field.awards");
+        docxFieldProduction = env.getProperty("application.document-template.field.production");
+        docxFieldBoxOffice = env.getProperty("application.document-template.field.boxOffice");
+        docxFieldMetascore = env.getProperty("application.document-template.field.metascore");
+        docxFieldImdbRating = env.getProperty("application.document-template.field.imdbRating");
+        docxFieldImdbVotes = env.getProperty("application.document-template.field.imdbVotes");
+        docxFieldAuthor = env.getProperty("application.document-template.field.author");
+        docxFieldCurrentYear = env.getProperty("application.document-template.field.currentYear");
+
+        // встановлення відповідності між назвами форматів та цілочисельними
+        // константами із Apache POI
         imageFormatMapper = new HashMap<>();
         imageFormatMapper.put("emf", XWPFDocument.PICTURE_TYPE_EMF);
         imageFormatMapper.put("wmf", XWPFDocument.PICTURE_TYPE_WMF);
@@ -121,257 +561,357 @@ public class FilmService {
         imageFormatMapper.put("eps", XWPFDocument.PICTURE_TYPE_EPS);
         imageFormatMapper.put("bmp", XWPFDocument.PICTURE_TYPE_BMP);
         imageFormatMapper.put("wpg", XWPFDocument.PICTURE_TYPE_WPG);
+
+        // інші налаштування
+        applicationName = env.getProperty("application.name");
+        templateFilename = env.getProperty("application.document-template.filename");
+        ratingsTableAnchor = env.getProperty("application.document-template.ratings-table-anchor");
+        noPosterImage = env.getProperty("application.no-poster-image-filename");
+        posterName = env.getProperty("application.document-template.poster-name");
+        exceptionMessageBadInput = env.getProperty("application.exception-message.bad-input");
+        exceptionMessageDataGatheringFailed = env.getProperty("application.exception-message.data-gathering-failed");
+        exceptionMessageNoDataFound = env.getProperty("application.exception-message.no-data-found");
+        exceptionMessageApplicationInnerException = env.getProperty("application.exception-message.application-inner-exception");
+        exceptionMessageBadPosterExtension = env.getProperty("application.exception-message.bad-poster-extension");
     }
 
-    private static final String JSON_KEY_TYPE = "Type";
-    private static final String JSON_KEY_TITLE = "Title";
-    private static final String JSON_KEY_YEAR = "Year";
-    private static final String JSON_KEY_IMDB_ID = "imdbID";
-    private static final String JSON_KEY_PLOT = "Plot";
-
-    private static final String JSON_KEY_RATED = "Rated";
-    private static final String JSON_KEY_RUNTIME = "Runtime";
-    private static final String JSON_KEY_GENRE = "Genre";
-    private static final String JSON_KEY_RELEASED = "Released";
-
-    private static final String JSON_KEY_DIRECTOR = "Director";
-    private static final String JSON_KEY_WRITER = "Writer";
-    private static final String JSON_KEY_ACTORS = "Actors";
-
-    private static final String JSON_KEY_LANGUAGE = "Language";
-    private static final String JSON_KEY_COUNTRY = "Country";
-    private static final String JSON_KEY_AWARDS = "Awards";
-
-    private static final String JSON_KEY_PRODUCTION = "Production";
-    private static final String JSON_KEY_BOX_OFFICE = "BoxOffice";
-
-    private static final String JSON_KEY_METASCORE = "Metascore";
-    private static final String JSON_KEY_IMDB_RATING = "imdbRating";
-    private static final String JSON_KEY_IMDB_VOTES = "imdbVotes";
-    private static final String JSON_KEY_RATINGS = "Ratings";
-
-    private static final String JSON_RATING_SOURCE_KEY_SOURCE = "Source";
-    private static final String JSON_RATING_SOURCE_KEY_VALUE = "Value";
-
-    private static final String JSON_KEY_POSTER = "Poster";
-
-    private static final String DEFAULT_FIELD_VALUE = "—";
-
-    private <T> T nvl(JSONObject obj, String key, T ifNull, Class<T> clazz) {
-        T data = (T)obj.get(key);
-        return (data != null ? data : ifNull);
-    }
-
-    private String getValue(JSONObject obj, String key) {
-        return nvl(obj, key, DEFAULT_FIELD_VALUE, String.class);
-    }
-
-    private FilmDTO parse(String json) {
-        JSONObject obj = new JSONObject(json);
-        FilmDTO filmDTO = new FilmDTO();
-
-        filmDTO.setType(getValue(obj, JSON_KEY_TYPE));
-        filmDTO.setTitle(getValue(obj, JSON_KEY_TITLE));
-        filmDTO.setYear(getValue(obj, JSON_KEY_YEAR));
-        filmDTO.setImdbID(getValue(obj, JSON_KEY_IMDB_ID));
-
-        filmDTO.setRated(getValue(obj, JSON_KEY_RATED));
-        filmDTO.setRuntime(getValue(obj, JSON_KEY_RUNTIME));
-        filmDTO.setGenre(getValue(obj, JSON_KEY_GENRE));
-        filmDTO.setReleased(getValue(obj, JSON_KEY_RELEASED));
-
-        filmDTO.setPlot(getValue(obj, JSON_KEY_PLOT));
-
-        filmDTO.setDirector(getValue(obj, JSON_KEY_DIRECTOR));
-        filmDTO.setWriter(getValue(obj, JSON_KEY_WRITER));
-        filmDTO.setActors(getValue(obj, JSON_KEY_ACTORS));
-
-        filmDTO.setLanguage(getValue(obj, JSON_KEY_LANGUAGE));
-        filmDTO.setCountry(getValue(obj, JSON_KEY_COUNTRY));
-        filmDTO.setAwards(getValue(obj, JSON_KEY_AWARDS));
-
-        filmDTO.setProduction(getValue(obj, JSON_KEY_PRODUCTION));
-        filmDTO.setBoxOffice(getValue(obj, JSON_KEY_BOX_OFFICE));
-
-        filmDTO.setMetascore(getValue(obj, JSON_KEY_METASCORE));
-        filmDTO.setImdbRating(getValue(obj, JSON_KEY_IMDB_RATING));
-        filmDTO.setImdbVotes(getValue(obj, JSON_KEY_IMDB_VOTES));
-
-        // рейтинги
-        Map<String, Map<String, String>> ratings = new HashMap<>();
-        JSONArray jsonArray = obj.getJSONArray(JSON_KEY_RATINGS);
-
-        int size = jsonArray.length();
-        JSONObject temp;
-        HashMap<String, String> currentMap;
-        for (int index = 0; index < size; ++index) {
-            temp = jsonArray.getJSONObject(index);
-            currentMap = new HashMap<>();
-            currentMap.put(JSON_RATING_SOURCE_KEY_SOURCE, getValue(temp, JSON_RATING_SOURCE_KEY_SOURCE));
-            currentMap.put(JSON_RATING_SOURCE_KEY_VALUE, getValue(temp, JSON_RATING_SOURCE_KEY_VALUE));
-            ratings.put(String.valueOf(index), currentMap);
+    private String getString(final JSONObject obj, final String key, final String defaultValue) {
+        if (!obj.has(key)) {
+            return defaultValue;
         }
-        filmDTO.setRatings(ratings);
+        try {
+            return obj.getString(key);
+        } catch (JSONException e) {
+            return defaultValue;
+        }
+    }
 
-        //...
-        filmDTO.setPoster(getValue(obj, JSON_KEY_POSTER));
+    private String getString(final JSONObject obj, final String key) {
+        return getString(obj, key, jsonValueDefaultStringField);
+    }
+
+    private FilmDTO parse(final String json) {
+        JSONObject obj = null;
+        String response;
+
+        // намагаємося створити JSON-об'єкт із вказаноо рядка; на випадок, коли
+        // це зробити не вдасться - відповідний DTO повинен мати інформацію, що
+        // отримана була погана відповідь (bad response)
+        try {
+            obj = new JSONObject(json);
+            response = getString(obj, jsonKeyResponse, jsonValueBadResponse);
+        } catch (JSONException e) {
+            response = jsonValueBadResponse;
+        }
+        FilmDTO filmDTO = new FilmDTO();
+        filmDTO.setResponse(response);
+
+        // якщо JSON-об'єкт був успішно прочитаний та не містив даних про те,
+        // що отримана відповідь - погана, можемо зчитувати з нього дані;
+        // на випадок, якщо деякі поля не містяться в ньому - передбачається
+        // значення за замовчуванням
+        if (!response.equals(jsonValueBadResponse)) {
+            filmDTO.setType(getString(obj, jsonKeyType));
+            filmDTO.setTitle(getString(obj, jsonKeyTitle));
+            filmDTO.setYear(getString(obj, jsonKeyYear));
+            filmDTO.setImdbID(getString(obj, jsonKeyImdbId));
+            filmDTO.setPlot(getString(obj, jsonKeyPlot));
+            filmDTO.setPoster(getString(obj, jsonKeyPoster, null));
+            filmDTO.setRated(getString(obj, jsonKeyRated));
+            filmDTO.setRuntime(getString(obj, jsonKeyRuntime));
+            filmDTO.setGenre(getString(obj, jsonKeyGenre));
+            filmDTO.setReleased(getString(obj, jsonKeyReleased));
+            filmDTO.setDirector(getString(obj, jsonKeyDirector));
+            filmDTO.setWriter(getString(obj, jsonKeyWriter));
+            filmDTO.setActors(getString(obj, jsonKeyActors));
+            filmDTO.setLanguage(getString(obj, jsonKeyLanguage));
+            filmDTO.setCountry(getString(obj, jsonKeyCountry));
+            filmDTO.setAwards(getString(obj, jsonKeyAwards));
+            filmDTO.setProduction(getString(obj, jsonKeyProduction));
+            filmDTO.setBoxOffice(getString(obj, jsonKeyBoxOffice));
+            filmDTO.setMetascore(getString(obj, jsonKeyMetascore));
+            filmDTO.setImdbRating(getString(obj, jsonKeyImdbRating));
+            filmDTO.setImdbVotes(getString(obj, jsonKeyImdbVotes));
+
+            // перевіряється, чи містить JSON-об'єкт дані про рейтинги на
+            // різноманітних ресурсах
+            if (obj.has(jsonKeyRatings)) {
+                Map<String, Map<String, String>> ratings = new HashMap<>();
+                JSONArray jsonArray = obj.getJSONArray(jsonKeyRatings);
+
+                int size = jsonArray.length();
+                JSONObject temp;
+                HashMap<String, String> currentMap;
+                for (int index = 0; index < size; ++index) {
+                    temp = jsonArray.getJSONObject(index);
+                    currentMap = new HashMap<>();
+                    currentMap.put(jsonRatingSourceKeySource, getString(temp, jsonRatingSourceKeySource));
+                    currentMap.put(jsonRatingSourceKeyValue, getString(temp, jsonRatingSourceKeyValue));
+                    ratings.put(String.valueOf(index), currentMap);
+                }
+                filmDTO.setRatings(ratings);
+            }
+        }
 
         return filmDTO;
     }
 
     /**
      * Повертає тіло відповіді відповідно до параметрів, що містить у собі DTO.
+     * Параметри, такі як назва фільму (title), IMDb ID (id) будуть
+     * обов'язковими (один із них).
+     *
+     * Рік випуску фільму є опціональним. Його можна вказувати лише в запитах, що
+     * спираються на назву. Метод згенерує виключення на випадок, якщо цей
+     * параметр буде визначений для запиту, що сприається на IMDb ID. Може бути
+     * порожнім рядком.
+     *
+     * Режим відображення сюжету - опціональний параметр. За замовчуванням -
+     * short. Може бути порожнім рядком.
+     *
+     * Формат відповіді - опціональний параметр. За замовчуванням - JSON. Може
+     * бути порожнім рядком.
      * @param dto об'єкт для передачі даних про фільм
      * @return тіло відповіді
      */
-    private String getURL(GetFilmDataRequest dto) throws FilmServiceException {
-        URLBuilder urlb = new URLBuilder(DATA_SOURCE_PROTOCOL, DATA_SOURCE_HOST);
+    private String getURL(final GetFilmDataRequest dto) throws FilmServiceException {
+        URLBuilder urlb = new URLBuilder(dataSourceProtocol, dataSourceHost);
         String title = dto.getTitle();
         String id = dto.getId();
-        if (title == null && id == null) {
-            throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new PrimaryRequestParamOmitedException("Назва фільму або його IMDb ID повинен бути вказаний"));
-        } else if (title != null && id != null) {
-            throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new RequestParamsConflictException("Конфлікт параметрів: треба вказувати або назву фільму, або його IMDb ID"));
-        } else if (title != null && !title.isEmpty()) {
-            urlb.addParameter(DATA_SOURCE_QUERY_KEY_TITLE, title);
 
+        boolean titlePresented = title != null;
+        boolean idPresented = id != null;
+
+        boolean titleIsEmpty = titlePresented && (title.isEmpty());
+        boolean idIsEmpty = idPresented && (id.isEmpty());
+        if (!titlePresented && !idPresented) {
+            throw new FilmServiceException(exceptionMessageBadInput, new RequestParamOmitedException("Назва фільму або його IMDb ID повинен бути вказаний"));
+        } else if (titlePresented && idPresented) {
+            throw new FilmServiceException(exceptionMessageBadInput, new RequestParamsConflictException("Конфлікт параметрів: треба вказувати або назву фільму, або його IMDb ID"));
+        } else {
+            // якщо назва фільму представлена - вона повинна бути непорожньою;
+            // або - заданий IMDb ID, що на цей випадок не може бути порожнім
+            if (titlePresented && titleIsEmpty) {
+                throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Значення основного параметру (назва фільму) не може бути порожньою"));
+            } else if (idPresented && idIsEmpty) {
+                throw new FilmServiceException(exceptionMessageBadInput, new RequestParamsConflictException("Значення основного параметру (IMDb ID) не може бути порожньою"));
+            }
+
+            // непорожність назви фільму говорить про його існування (not null)
+            // та відсутність IMDb ID (null) і навпаки
+            if (!titleIsEmpty) {
+                urlb.addParameter(dataSourceQueryKeyTitle, title);
+            } else {
+                urlb.addParameter(dataSourceQueryKeyId, id);
+            }
+
+            // рік - опціональний параметр, що може бути вказаний для фільму,
+            // що шукаємо за назвою, може бути порожнім рядком - для зручності
+            // передачі даних із форми
             String year = dto.getYear();
             if (year != null && !year.isEmpty()) {
-                try {
-                    urlb.addParameter(DATA_SOURCE_QUERY_KEY_YEAR, Integer.parseInt(year));
-                } catch (NumberFormatException e) {
-                    throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new RequestParamInvalidValueException("Некоректне значення параметра року випуску фільму"));
-                }
-            }
-
-            String plot = dto.getPlot();
-            if (plot != null && !plot.isEmpty()) {
-                if (requestParamMapper.isParameterValueValid(env.getProperty("application.api.param.plot"), plot)) {
-                    urlb.addParameter(DATA_SOURCE_QUERY_KEY_PLOT, plot);
+                // дійшовши до цього фрагмента - рядок із роком непорожінй,
+                // тому знаходимо, за яким саме параметром відбувався пошук
+                // (за назвою фільму або його IMDb ID)
+                if (!titleIsEmpty) {
+                    // назва фільму непорожня, отже - існує, а значить - не
+                    // існує IMDb ID, тому намагаємося інтерпретувати значення
+                    try {
+                        urlb.addParameter(dataSourceQueryKeyYear, Integer.parseInt(year));
+                    } catch (NumberFormatException e) {
+                        throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Некоректне значення параметра року випуску фільму"));
+                    }
                 } else {
-                    throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new RequestParamInvalidValueException("Некоректне значення параметра, що відповідає за тип співпадіння"));
+                    // назва фільму виявилася порожньою, отже - її і не
+                    // існувало - отже, здійснюється запит за IMDb, для якого
+                    // вказання року є непотрібним
+                    throw new FilmServiceException(exceptionMessageBadInput, new RedundantRequestParamException("Вказаний рік випуску фільму є надлишковим параметром для запиту за IMDb ID"));
                 }
             }
-        } else if (id != null && !id.isEmpty()) {
-            urlb.addParameter(DATA_SOURCE_QUERY_KEY_ID, id);
-            // параметр співпадінь враховувати немає потреби, оскільки
-            // здійснити пошук за "приблизним" IMDb неможливо (джерело даних
-            // не підтримує таку комбінацію параметрів), тому вказання цього
-            // параметра буде вважатися надлишковим
+
+            // режим відображення сюжету - опціональний параметр, рівний short
+            // за замовченням, рядок може бути порожнім - для зручності
+            // передачі даних із форми
             String plot = dto.getPlot();
             if (plot != null && !plot.isEmpty()) {
-                throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new RedundantRequestParamException("Переданий надлишковий параметр, який відповідає за тип співпадіння"));
+                // режим відображення сюжету виявився не порожнім - тепер треба
+                // проаналізувати валідність його значення
+                if (requestParamMapper.isParameterValueValid(applicationQueryKeyPlot, plot)) {
+                    urlb.addParameter(dataSourceQueryKeyPlot, plot);
+                } else {
+                    throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Некоректне значення параметра, що відповідає за режим відображення сюжету"));
+                }
+            } else {
+                // встановлення значення за замовчуванням
+                urlb.addParameter(dataSourceQueryKeyPlot, env.getProperty("application.plot-mode.default"));
             }
-        } else {
-            throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new RequestParamInvalidValueException("Значення обов'язкового параметру не може бути порожнім"));
+
+            // формат відповіді - опціональний параметр, рівний json за
+            // замовчуванням, може бути рівний порожньому рядку - для зручності
+            // передачі даних із форми
+            String format = dto.getFormat();
+            if (format != null && !format.isEmpty()) {
+                // формат відповіді виявився непорожнім - треба проаналізувати
+                // валідність його значення
+                if (requestParamMapper.isParameterValueValid(applicationQueryKeyFormat, format)) {
+                    urlb.addParameter(dataSourceQueryKeyFormat, format);
+                } else {
+                    throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Некоректне значення параметра, що відповідає за формат відповіді"));
+                }
+            } else {
+                // встановлення значення за замовчуванням
+                urlb.addParameter(dataSourceQueryKeyPlot, env.getProperty("application.response-data-format.default"));
+            }
         }
 
-        String format = dto.getFormat();
-        if (format != null && !format.isEmpty() && requestParamMapper.isParameterValueValid(env.getProperty("application.api.param.format"), format)) {
-            urlb.addParameter(DATA_SOURCE_QUERY_KEY_FORMAT, format);
-        } else {
-            throw new FilmServiceException(EXCEPTION_MESSAGE_BAD_INPUT, new RequestParamInvalidValueException("Параметр, що відповідає за формат відповіді, не може бути порожнім"));
-        }
-        urlb.addParameter(DATA_SOURCE_QUERY_KEY_API_KEY, DATA_SOURCE_API_KEY);
+        // встановлення використовуванного ключу до API для можливості
+        // використання джерела даних
+        urlb.addParameter(dataSourceQueryKeyApiKey, dataSourceApiKey);
         return urlb.toString();
     }
 
     /**
-     * Повертає тіло відповіді відповідно до параметрів, що містить у собі DTO.
-     * @param dto об'єкт для передачі даних про фільм
+     * Повертає тіло відповіді відповідно до параметрів, що містить у собі DTO
+     * запиту. Працює в асинхронному режимі.
+     * @param dto об'єкт для передачі даних про запит
      * @return тіло відповіді
      */
     @Async("threadPoolTaskExecutor")
-    public CompletableFuture<String> getRequestBody(GetFilmDataRequest dto) throws FilmServiceException, InterruptedException {
-        return CompletableFuture.completedFuture(restTemplate.getForObject(getURL(dto), String.class));
+    public CompletableFuture<String> getRequestBody(final GetFilmDataRequest dto) throws FilmServiceException {
+        try {
+            return CompletableFuture.completedFuture(restTemplate.getForObject(getURL(dto), String.class));
+        } catch (RestClientException e) {
+            throw new FilmServiceException(exceptionMessageDataGatheringFailed, e);
+        }
     }
 
+    /**
+     * Повертає документ, наповнення якого залежить від параметрів, що містить
+     * у собі DTO запиту. Працює в асинхронному режимі.
+     * @param dto об'єкт для передачі даних про запит
+     * @return документ
+     * @throws FilmServiceException
+     */
     @Async("threadPoolTaskExecutor")
-    public CompletableFuture<XWPFDocument> getDocument(GetFilmDataRequest dto) throws FilmServiceException, URISyntaxException, IOException, XmlException, InterruptedException {
-        FilmDTO filmDTO = parse(restTemplate.getForObject(getURL(dto), String.class));
-        File file = new File(getClass().getClassLoader().getResource(TEMPLATE_FILENAME).toURI());
-        XWPFDocument document = new XWPFDocument(new FileInputStream(file));
+    public CompletableFuture<XWPFDocument> getDocument(final GetFilmDataRequest dto) throws FilmServiceException {
+        String json;
+        try {
+            json = restTemplate.getForObject(getURL(dto), String.class);
+        } catch (RestClientException e) {
+            throw new FilmServiceException(exceptionMessageDataGatheringFailed, e);
+        }
 
-        Map<String, String> map = new HashMap<>();
-        map.put("type", filmDTO.getType());
-        map.put("title", filmDTO.getTitle());
-        map.put("year", filmDTO.getYear());
-        map.put("imdbID", filmDTO.getImdbID());
+        // якщо спроба отримати дані була успішною
+        FilmDTO filmDTO = parse(json);
 
-        map.put("rated", filmDTO.getRated());
-        map.put("runtime", filmDTO.getRuntime());
-        map.put("genre", filmDTO.getGenre());
-        map.put("released", filmDTO.getReleased());
-
-        map.put("plot", filmDTO.getPlot());
-
-        map.put("director", filmDTO.getDirector());
-        map.put("writer", filmDTO.getWriter());
-        map.put("actors", filmDTO.getActors());
-
-        map.put("language", filmDTO.getLanguage());
-        map.put("country", filmDTO.getCountry());
-        map.put("awards", filmDTO.getAwards());
-
-        map.put("production", filmDTO.getProduction());
-        map.put("boxOffice", filmDTO.getBoxOffice());
-
-        map.put("metascore", filmDTO.getMetascore());
-        map.put("imdbRating", filmDTO.getImdbRating());
-        map.put("imdbVotes", filmDTO.getImdbVotes());
-
-        map.put("author", env.getProperty("application.name"));
-        map.put("currentYear", String.valueOf((new Date().getYear())+1900));
-        XWPFDocumentManipulator.bindFields(document, map);
-
-        // рейтинги
-        XWPFTable tableWithRatings = XWPFDocumentManipulator.getTableWithContent(document, "Metascore");
-        int size = tableWithRatings.getRows().size();
-
-        Map<String, Map<String, String>> ratings = filmDTO.getRatings();
-        Set<String> keys = ratings.keySet();
-        for (String key : keys) {
-            Map<String, String> value = ratings.get(key);
-
-            XWPFTableRow lastRow = tableWithRatings.getRow(size - 1);
-            CTRow ctrow = CTRow.Factory.parse(lastRow.getCtRow().newInputStream());
-            XWPFTableRow newRow = new XWPFTableRow(ctrow, tableWithRatings);
-
-            // для видалення тексту, що був отриманий із попереднього рядка шляхом використання його xml-розмітки
-            for (XWPFTableCell cell : newRow.getTableCells()) {
-                XWPFDocumentManipulator.removeAllParagraphs(cell);
+        if (!filmDTO.getResponse().equals(jsonValueBadResponse)) {
+            File file;
+            try {
+                file = new File(getClass().getClassLoader().getResource(templateFilename).toURI());
+            } catch (NullPointerException | URISyntaxException e) {
+                throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
+            }
+            XWPFDocument document;
+            try {
+                document = new XWPFDocument(new FileInputStream(file));
+            } catch (IOException e) {
+                throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
             }
 
-            newRow.getCell(0).setText(value.get(JSON_RATING_SOURCE_KEY_SOURCE));
-            newRow.getCell(1).setText(value.get(JSON_RATING_SOURCE_KEY_VALUE));
+            // якщо внутрішніх помилок не відбулося - можна переносити дані та
+            // формувати документ-результат
+            Map<String, String> map = new HashMap<>();
+            map.put(docxFieldType, filmDTO.getType());
+            map.put(docxFieldTitle, filmDTO.getTitle());
+            map.put(docxFieldYear, filmDTO.getYear());
+            map.put(docxFieldImdbID, filmDTO.getImdbID());
+            map.put(docxFieldPlot, filmDTO.getPlot());
+            map.put(docxFieldRated, filmDTO.getRated());
+            map.put(docxFieldRuntime, filmDTO.getRuntime());
+            map.put(docxFieldGenre, filmDTO.getGenre());
+            map.put(docxFieldReleased, filmDTO.getReleased());
+            map.put(docxFieldDirector, filmDTO.getDirector());
+            map.put(docxFieldWriter, filmDTO.getWriter());
+            map.put(docxFieldActors, filmDTO.getActors());
+            map.put(docxFieldLanguage, filmDTO.getLanguage());
+            map.put(docxFieldCountry, filmDTO.getCountry());
+            map.put(docxFieldAwards, filmDTO.getAwards());
+            map.put(docxFieldProduction, filmDTO.getProduction());
+            map.put(docxFieldBoxOffice, filmDTO.getBoxOffice());
+            map.put(docxFieldMetascore, filmDTO.getMetascore());
+            map.put(docxFieldImdbRating, filmDTO.getImdbRating());
+            map.put(docxFieldImdbVotes, filmDTO.getImdbVotes());
+            map.put(docxFieldAuthor, applicationName);
+            map.put(docxFieldCurrentYear, String.valueOf((Calendar.getInstance().get(Calendar.YEAR))));
+            XWPFDocumentManipulator.bindFields(document, map);
 
-            tableWithRatings.addRow(newRow, size);
-            ++size;
-        }
+            // заповнення даних про рейтинги, якщо вони наявні
+            Map<String, Map<String, String>> ratings = filmDTO.getRatings();
+            if (ratings != null && ratings.size() > 0) {
+                XWPFTable tableWithRatings = XWPFDocumentManipulator.getTableWithContent(document, ratingsTableAnchor);
+                int size = tableWithRatings.getRows().size();
+                Set<String> keys = ratings.keySet();
+                for (String key : keys) {
+                    Map<String, String> sourceEntry = ratings.get(key);
+                    XWPFTableRow lastRow = tableWithRatings.getRow(size - 1);
+                    CTRow ctrow;
+                    try {
+                        ctrow = CTRow.Factory.parse(lastRow.getCtRow().newInputStream());
+                    } catch (XmlException | IOException e) {
+                        throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
+                    }
+                    XWPFTableRow newRow = new XWPFTableRow(ctrow, tableWithRatings);
 
-        String poster = filmDTO.getPoster();
-        ImageDTO imageDTO;
-        BufferedImage bufferedImage;
-        byte[] data;
-        InputStream io;
-        String formatName;
+                    // видалення тексту, що був отриманий із попереднього рядка
+                    // шляхом використання його xml-розмітки
+                    for (XWPFTableCell cell : newRow.getTableCells()) {
+                        XWPFDocumentManipulator.removeAllParagraphs(cell);
+                    }
 
-        if (poster != null && !poster.equals(DEFAULT_FIELD_VALUE) && imageFormatMapper.containsKey(formatName = poster.substring(poster.lastIndexOf('.')+1, poster.length()).toLowerCase())) {
-            data = restTemplate.getForObject(poster, byte[].class);
+                    // заповнення даними таблиці у вигляді: джерело рейтингу, оцінка
+                    newRow.getCell(0).setText(sourceEntry.get(jsonRatingSourceKeySource));
+                    newRow.getCell(1).setText(sourceEntry.get(jsonRatingSourceKeyValue));
+                    tableWithRatings.addRow(newRow, size++);
+                }
+            }
+
+            String poster = filmDTO.getPoster();
+            byte[] data;
+
+            // отримання даних про зображення: якщо не буде наявний постер, тоді
+            // буде використано зображення за замовчуванням замість нього
+            if (poster != null) {
+                try {
+                    data = restTemplate.getForObject(poster, byte[].class);
+                } catch (RestClientException e) {
+                    throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
+                }
+            } else {
+                try (FileInputStream fis = new FileInputStream(new File(getClass().getClassLoader().getResource(noPosterImage).toURI()))) {
+                    data = IOUtils.toByteArray(fis);
+                } catch (NullPointerException | URISyntaxException | IOException e) {
+                    throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
+                }
+                poster = noPosterImage;
+            }
+
+            // спрощена перевірка наявності підтримки розширення файла
+            String formatName = poster.substring(poster.lastIndexOf('.') + 1);
+            if (!imageFormatMapper.containsKey(formatName)) {
+                throw new FilmServiceException(exceptionMessageApplicationInnerException, new BadPosterExtensionException(exceptionMessageBadPosterExtension));
+            }
+
+            try (InputStream io = new ByteArrayInputStream(data)) {
+                BufferedImage bufferedImage = ImageIO.read(io);
+                ImageDTO imageDTO = new ImageDTO(data, bufferedImage.getWidth(), bufferedImage.getHeight(), imageFormatMapper.get(formatName), posterName);
+                XWPFDocumentManipulator.bindImageToField(document, docxFieldPoster, imageDTO);
+            } catch (IOException e) {
+                throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
+            }
+
+            return CompletableFuture.completedFuture(document);
         } else {
-            FileInputStream fis = new FileInputStream(new File(getClass().getClassLoader().getResource("Image.png").toURI()));
-            formatName = "png";
-            data = IOUtils.toByteArray(fis);
-            fis.close();
+            throw new FilmServiceException(exceptionMessageDataGatheringFailed, new NoDataFoundException(exceptionMessageNoDataFound));
         }
-
-        io = new ByteArrayInputStream(data);
-        bufferedImage = ImageIO.read(io);
-        imageDTO = new ImageDTO(data, bufferedImage.getWidth(), bufferedImage.getHeight(), imageFormatMapper.get(formatName), "Poster");
-        XWPFDocumentManipulator.bindImageToField(document, "poster", imageDTO);
-
-        return CompletableFuture.completedFuture(document);
     }
-
-    private final Map<String, Integer> imageFormatMapper;
 }

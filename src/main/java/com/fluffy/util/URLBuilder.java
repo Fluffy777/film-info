@@ -2,7 +2,6 @@ package com.fluffy.util;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 
 /**
  * Клас будівника URL-адреси.
@@ -46,7 +45,7 @@ public class URLBuilder {
      * Створює об'єкт будівника URL-адреси на основі вказаного домену.
      * @param host домен
      */
-    public URLBuilder(String host) {
+    public URLBuilder(final String host) {
         this();
         this.host = host;
     }
@@ -57,7 +56,7 @@ public class URLBuilder {
      * @param protocol протокол
      * @param host домен
      */
-    public URLBuilder(String protocol, String host) {
+    public URLBuilder(final String protocol, final String host) {
         this(host);
         this.protocol = protocol;
     }
@@ -67,7 +66,7 @@ public class URLBuilder {
      * @param protocol протокол
      * @return об'єкт будівника
      */
-    public URLBuilder setProtocol(String protocol) {
+    public URLBuilder setProtocol(final String protocol) {
         this.protocol = protocol;
         return this;
     }
@@ -85,7 +84,7 @@ public class URLBuilder {
      * @param host домен
      * @return об'єкт будівника
      */
-    public URLBuilder setHost(String host) {
+    public URLBuilder setHost(final String host) {
         this.host = host;
         return this;
     }
@@ -103,7 +102,7 @@ public class URLBuilder {
      * @param fragment фрагмент
      * @return об'єкт будівника
      */
-    public URLBuilder setFragment(String fragment) {
+    public URLBuilder setFragment(final String fragment) {
         this.fragment = fragment;
         return this;
     }
@@ -121,14 +120,14 @@ public class URLBuilder {
      * @param folder назва директорії
      * @return об'єкт будівника
      */
-    public URLBuilder addSubfolder(String folder) {
+    public URLBuilder addSubfolder(final String folder) {
         folders.append("/");
         folders.append(folder);
         return this;
     }
 
     // метод для внутрішнього використання
-    private void addParameter0(String parameter) {
+    private void addParameter0(final String parameter) {
         if (params.length() > 0) {
             params.append("&");
         }
@@ -142,7 +141,7 @@ public class URLBuilder {
      * @param value значення
      * @return об'єкт будівника
      */
-    public URLBuilder addParameter(String parameter, String value) {
+    public URLBuilder addParameter(final String parameter, final String value) {
         addParameter0(parameter);
         params.append(value);
         return this;
@@ -154,7 +153,7 @@ public class URLBuilder {
      * @param value значення
      * @return об'єкт будівника
      */
-    public URLBuilder addParameter(String parameter, int value) {
+    public URLBuilder addParameter(final String parameter, final int value) {
         addParameter0(parameter);
         params.append(value);
         return this;
@@ -166,7 +165,7 @@ public class URLBuilder {
      * @param value значення
      * @return об'єкт будівника
      */
-    public URLBuilder addParameter(String parameter, Object value) {
+    public URLBuilder addParameter(final String parameter, final Object value) {
         addParameter0(parameter);
         params.append(value);
         return this;

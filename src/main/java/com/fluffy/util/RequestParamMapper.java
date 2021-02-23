@@ -33,10 +33,10 @@ public class RequestParamMapper {
     private final Map<String, Map<String, String>> values;
 
     /**
-     * Створює об'єкт (бін), що займається співставленнями звернень до API.
-     * @param env
+     * Створює бін, що займається співставленнями звернень до API.
+     * @param env бін для можливості отримання значень властивостей
      */
-    public RequestParamMapper(Environment env) {
+    public RequestParamMapper(final Environment env) {
         this.env = env;
         params = new HashMap<>();
         params.put(env.getProperty("application.api.param.title"), env.getProperty("application.data-source.api.param.title"));
@@ -47,14 +47,14 @@ public class RequestParamMapper {
 
         values = new HashMap<>();
         Map<String, String> currentMap = new HashMap<>();
-        currentMap.put("short", "short");
-        currentMap.put("full", "full");
+        currentMap.put(env.getProperty("application.plot-mode.short"), env.getProperty("application.data-source.plot-mode.short"));
+        currentMap.put(env.getProperty("application.plot-mode.full"), env.getProperty("application.data-source.plot-mode.full"));
         values.put(env.getProperty("application.api.param.plot"), currentMap);
 
         currentMap = new HashMap<>();
-        currentMap.put("xml", "xml");
-        currentMap.put("json", "json");
-        currentMap.put("docx", ""); // передачається лише нашим додатком
+        currentMap.put(env.getProperty("application.response-data-format.xml"), env.getProperty("application.data-source.response-data-format.xml"));
+        currentMap.put(env.getProperty("application.response-data-format.json"), env.getProperty("application.data-source.response-data-format.json"));
+        currentMap.put(env.getProperty("application.response-data-format.docx"), env.getProperty("application.data-source.response-data-format.docx")); // передачається лише нашим додатком
         values.put(env.getProperty("application.api.param.format"), currentMap);
     }
 
@@ -63,7 +63,7 @@ public class RequestParamMapper {
      * @param param назва параметра додатку
      * @return назва параметра джерела даних
      */
-    public String mapParam(String param) {
+    public String mapParam(final String param) {
         if (!isParamValid(param)) {
             return null;
         }
@@ -76,7 +76,7 @@ public class RequestParamMapper {
      * @param value значення параметра для додатку
      * @return значення відповідного параметра для джерела даних
      */
-    public String mapValue(String param, String value) {
+    public String mapValue(final String param, final String value) {
         if (!isParamValid(param)) {
             return null;
         }
@@ -88,7 +88,7 @@ public class RequestParamMapper {
      * @param param назва параметра для додатку
      * @return існує чи ні
      */
-    public boolean isParamValid(String param) {
+    public boolean isParamValid(final String param) {
         return params.containsKey(param);
     }
 
@@ -98,7 +98,7 @@ public class RequestParamMapper {
      * @param value значення параметра
      * @return існує чи ні
      */
-    public boolean isParameterValueValid(String param, String value) {
+    public boolean isParameterValueValid(final String param, final String value) {
         if (!isParamValid(param)) {
             return false;
         }

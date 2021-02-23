@@ -87,10 +87,4 @@ window.onload = function() {
       this.value = this.value.substring(0,4);
     }
   }
-
-  form.querySelector('.form__input[date-name="year"]').onchange = function() {
-    if (this.value == "docx") {
-      
-    }
-  }
 }

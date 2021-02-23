@@ -13,15 +13,35 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * Клас, що відповідає за налаштування роботи асинхронних запитів.
+ * @author Сивоконь Вадим
+ */
 @Configuration
 @EnableAsync
 public class AsyncConfig implements AsyncConfigurer {
+    /**
+     * Бін, що використовується для отримання змінних оточення, визначених у
+     * application.properties.
+     */
     private final Environment env;
 
-    public AsyncConfig(Environment env) {
+    /**
+     * Повертає бін, що здійснює керування властивостями асинхронних потоків.
+     * @param env бін для читання значень змінних оточення
+     */
+    public AsyncConfig(final Environment env) {
         this.env = env;
     }
 
+    /**
+     * Перевизначений метод - встановлює для використання власний executor, що
+     * відрізняється встановленими параметрами від того, що пропонується за
+     * замовчуванням (SimpleAsyncTaskExecutor - не передбачає перевикористання
+     * потоків, що може становити загрозу для функціонування під великим
+     * навантаженням).
+     * @return бін конфігурації асинхронних запитів
+     */
     @Override
     @Bean("threadPoolTaskExecutor")
     public TaskExecutor getAsyncExecutor() {
@@ -37,21 +57,36 @@ public class AsyncConfig implements AsyncConfigurer {
         return executor;
     }
 
+    /**
+     * Повертає бін-конфігуратор, що може бути використаний для MVC патерну.
+     * @return бін-конфігуратор асинхронних запитів на випадок використання MVC
+     */
     @Bean
     protected WebMvcConfigurer webMvcConfigurer() {
         return new WebMvcConfigurer() {
             @Override
-            public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+            public void configureAsyncSupport(final AsyncSupportConfigurer configurer) {
                 configurer.setTaskExecutor(getTaskExecutor());
             }
         };
     }
 
+    /**
+     * Повертає бін, що буде підтримувати функціонування багатопоточності на
+     * основі створення біна-конфігуратора.
+     * @return бін для підтримки функціонування багатопоточності
+     */
     @Bean
     protected ConcurrentTaskExecutor getTaskExecutor() {
         return new ConcurrentTaskExecutor(this.getAsyncExecutor());
     }
 
+    /**
+     * Повертає об'єкт-обробник виняткових ситуацій, пов'язаних із
+     * використанням асинхронності.
+     * @return обробник виняткових ситуацій, пов'язаних із використанням
+     *         асинхронності
+     */
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return new SimpleAsyncUncaughtExceptionHandler();

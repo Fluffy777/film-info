@@ -1,17 +1,50 @@
 package com.fluffy.dtos;
 
+/**
+ * Клас, що надає можливість зберігати дані про зображення.
+ * @author Сивоконь Вадим
+ */
 public class ImageDTO {
+    /**
+     * Байти, із якого складається зображення.
+     */
     private byte[] data;
+
+    /**
+     * Ширина зображення (px).
+     */
     private int width;
+
+    /**
+     * Висота зображення (px).
+     */
     private int height;
+
+    /**
+     * Тип зображення.
+     */
     private int pictureType;
+
+    /**
+     * Назва файлу.
+     */
     private String filename;
 
+    /**
+     * Створює порожній DTO зображення.
+     */
     public ImageDTO() {
-
     }
 
-    public ImageDTO(byte[] data, int width, int height, int pictureType, String filename) {
+    /**
+     * Створює DTO зображення.
+     * @param data байти файлу зображення
+     * @param width ширина зображення (px)
+     * @param height висота зображення (px)
+     * @param pictureType тип зображення
+     * @param filename назва файлу
+     */
+    public ImageDTO(final byte[] data, final int width, final int height, final int pictureType, final String filename) {
         this.data = data;
         this.width = width;
         this.height = height;
@@ -19,43 +52,83 @@ public class ImageDTO {
         this.filename = filename;
     }
 
+    /**
+     * Повертає байти, із яких складається зображення.
+     * @return байти, із яких складається зображення
+     */
     public byte[] getData() {
         return data;
     }
 
-    public void setData(byte[] data) {
+    /**
+     * Встановлює байти, із яких складається зображення.
+     * @param data байти, із яких складається зображення
+     */
+    public void setData(final byte[] data) {
         this.data = data;
     }
 
+    /**
+     * Повертає ширину зображення (px).
+     * @return ширина зображення (px)
+     */
     public int getWidth() {
         return width;
     }
 
-    public void setWidth(int width) {
+    /**
+     * Встановлює ширину зображення (px).
+     * @param width ширина зображення (px)
+     */
+    public void setWidth(final int width) {
         this.width = width;
     }
 
+    /**
+     * Повертає висоту зображення (px).
+     * @return висота зображення (px)
+     */
     public int getHeight() {
         return height;
     }
 
-    public void setHeight(int height) {
+    /**
+     * Встановлює висоту зображення (px).
+     * @param height висота зображення
+     */
+    public void setHeight(final int height) {
         this.height = height;
     }
 
+    /**
+     * Повертає тип зображення.
+     * @return тип зображення
+     */
     public int getPictureType() {
         return pictureType;
     }
 
-    public void setPictureType(int pictureType) {
+    /**
+     * Встановлює тип зображення.
+     * @param pictureType тип зображення
+     */
+    public void setPictureType(final int pictureType) {
         this.pictureType = pictureType;
     }
 
+    /**
+     * Повертає назву файла.
+     * @return назва файла
+     */
     public String getFilename() {
         return filename;
     }
 
-    public void setFilename(String filename) {
+    /**
+     * Встановлює назву файла.
+     * @param filename назва файла
+     */
+    public void setFilename(final String filename) {
         this.filename = filename;
     }
 }
