@@ -21,8 +21,14 @@ public class ApplicationConfig {
         return new RestTemplate();
     }
 
+    /**
+     * Повертає бін словника, що слугує для встановлення відповідності між API
+     * додатку та API джерела даних.
+     * @param env бін для можливості отримання значень властивостей
+     * @return бін словника, що встановлює відповідності API
+     */
     @Bean
-    public RequestParamMapper requestParamMapper(Environment env) {
+    public RequestParamMapper requestParamMapper(final Environment env) {
         return new RequestParamMapper(env);
     }
 }

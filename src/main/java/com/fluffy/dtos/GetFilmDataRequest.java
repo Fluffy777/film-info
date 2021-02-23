@@ -1,8 +1,8 @@
 package com.fluffy.dtos;
 
 /**
- * Клас, надає можливість створення об'єктів передачи даних (DTO) фільмів.
- * Забезпечує інформаційний обмін між контролерами та сервісами.
+ * Клас, об'єкти якого інкапсулюють параметри запиту до RESTful додатку.
+ * Забезпечує інформаційний обмін між шаром контролерів та сервісів.
  * @author Сивоконь Вадим
  */
 public class GetFilmDataRequest {
@@ -12,12 +12,12 @@ public class GetFilmDataRequest {
     private String title;
 
     /**
-     * Рік випуску. Рядок, щоб мати можливість перевірити на null.
+     * Рік випуску.
      */
     private String year;
 
     /**
-     * Тип співпадіння.
+     * Режим відображення сюжету: повний (full) або частковий (short).
      */
     private String plot;
 
@@ -32,14 +32,14 @@ public class GetFilmDataRequest {
     private String format;
 
     /**
-     * Створює об'єкт передачі даних про фільм.
+     * Створює об'єкт для передачі даних про фільм.
      * @param title назва фільму
      * @param year рік випуску фільму
-     * @param plot тип співпадіння
+     * @param plot режим відображення сюжету
      * @param id IMDb ID фільму
      * @param format формат відповіді
      */
-    public GetFilmDataRequest(String title, String year, String plot, String id, String format) {
+    public GetFilmDataRequest(final String title, final String year, final String plot, final String id, final String format) {
         this.title = title;
         this.year = year;
         this.plot = plot;
@@ -65,8 +65,8 @@ public class GetFilmDataRequest {
     }
 
     /**
-     * Повертає тип співпадіння.
-     * @return тип співпадіння
+     * Повертає режим відображення сюжету.
+     * @return режим відображення сюжету
      */
     public String getPlot() {
         return plot;
@@ -81,7 +81,7 @@ public class GetFilmDataRequest {
     }
 
     /**
-     * Повертає формат відповіді
+     * Повертає формат відповіді.
      * @return формат відповіді
      */
     public String getFormat() {
