@@ -15,7 +15,7 @@ import java.util.Map;
 public class RequestParamMapper {
     /**
      * Бін, що використовується для отримання змінних оточення, визначених у
-     * application.yml.
+     * application.properties.
      */
     private final Environment env;
 

@@ -42,7 +42,7 @@ public class FilmController {
     private final FilmService service;
 
     /**
-     * Бін, необхідний для отримання налаштувань із application.yml.
+     * Бін, необхідний для отримання налаштувань із application.properties.
      */
     private final Environment env;
 
@@ -130,6 +130,12 @@ public class FilmController {
      * @param id IMDb ID
      * @param format формат відповіді
      * @return відповідь у необхідному форматі
+     * @throws FilmServiceException коли через некоректний ввід не вдалося
+     *         отримати дані
+     * @throws ExecutionException коли існувала спроба отримати результат
+     *         задачі, але та примусово завершилася через інший виняток
+     * @throws InterruptedException коли потік знаходиться в активному стані,
+     *         але його виконання переривають
      */
     @GetMapping(value = "${application.endpoint.film-data}")
     @Cacheable("responseBodies")
@@ -188,8 +194,11 @@ public class FilmController {
             try (OutputStream writer = new DataOutputStream(response.getOutputStream())) {
                 CompletableFuture<XWPFDocument> futureDoc = service.getDocument(new GetFilmDataRequest(title, year, plot, id, env.getProperty("application.response-data-format.json")));
                 CompletableFuture.allOf(futureDoc).join();
-                futureDoc.get().write(writer);
-            } catch (InterruptedException | ExecutionException | FilmServiceException e) {
+                XWPFDocument doc = futureDoc.get();
+                doc.write(writer);
+                doc.close();
+                logger.info("Документ-результат надсилається користувачу");
+            } catch (InterruptedException | ExecutionException e) {
                 logger.log(Level.ERROR, "Не вдалося здійснити потокове надсилання документа клієнту", e);
             }
         };

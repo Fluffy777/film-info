@@ -22,7 +22,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class AsyncConfig implements AsyncConfigurer {
     /**
      * Бін, що використовується для отримання змінних оточення, визначених у
-     * application.yml.
+     * application.properties.
      */
     private final Environment env;
 

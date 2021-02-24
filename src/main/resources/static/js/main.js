@@ -27,13 +27,13 @@ function switchMode(oldSet, newSet) {
   oldSet.querySelectorAll(".form__input").forEach(function(item) {
     dataName = item.getAttribute("data-name");
 
-    if (dataName != "plot") {
+    if (dataName !== "plot") {
       item.value = "";
     } else {
       item.value = "short";
     }
     
-    if (dataName != "year" && dataName != "plot") {
+    if (dataName !== "year" && dataName !== "plot") {
       item.required = false;
     }
     
@@ -42,7 +42,7 @@ function switchMode(oldSet, newSet) {
 
   newSet.querySelectorAll(".form__input").forEach(function(item) {
     dataName = item.getAttribute("data-name");
-    if (dataName != "year" && dataName != "plot") {
+    if (dataName !== "year" && dataName !== "plot") {
       item.required = true;
     }
     item.name = dataName;
