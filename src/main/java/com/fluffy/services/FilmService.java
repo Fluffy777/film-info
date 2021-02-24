@@ -444,11 +444,6 @@ public class FilmService {
     private final String exceptionMessageApplicationInnerException;
 
     /**
-     * Опис проблеми, що пов'язана із непідтримуваним розширенням файлу зображення.
-     */
-    private final String exceptionMessageBadPosterExtension;
-
-    /**
      * Бін, що використовується для отримання змінних оточення, визначених у
      * application.properties.
      */
@@ -580,7 +575,6 @@ public class FilmService {
         exceptionMessageDataGatheringFailed = env.getProperty("application.exception-message.data-gathering-failed");
         exceptionMessageNoDataFound = env.getProperty("application.exception-message.no-data-found");
         exceptionMessageApplicationInnerException = env.getProperty("application.exception-message.application-inner-exception");
-        exceptionMessageBadPosterExtension = env.getProperty("application.exception-message.bad-poster-extension");
 
         logger.debug("Бін сервісу " + getClass().getSimpleName() + " створений");
     }
