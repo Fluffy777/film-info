@@ -3,7 +3,12 @@ package com.fluffy.services;
 import com.fluffy.dtos.FilmDTO;
 import com.fluffy.dtos.GetFilmDataRequest;
 import com.fluffy.dtos.ImageDTO;
-import com.fluffy.exceptions.*;
+import com.fluffy.exceptions.FilmServiceException;
+import com.fluffy.exceptions.NoDataFoundException;
+import com.fluffy.exceptions.RedundantRequestParamException;
+import com.fluffy.exceptions.RequestParamInvalidValueException;
+import com.fluffy.exceptions.RequestParamOmitedException;
+import com.fluffy.exceptions.RequestParamsConflictException;
 import com.fluffy.util.RequestParamMapper;
 import com.fluffy.util.URLBuilder;
 import com.fluffy.util.XWPFDocumentManipulator;
@@ -11,6 +16,8 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.poi.util.IOUtils;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
@@ -27,7 +34,11 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -439,7 +450,7 @@ public class FilmService {
 
     /**
      * Бін, що використовується для отримання змінних оточення, визначених у
-     * application.yml.
+     * application.properties.
      */
     private final Environment env;
 
@@ -458,7 +469,7 @@ public class FilmService {
 
     /**
      * Створює бін сервіса.
-     * @param env бін для отримання змінних із application.properties
+     * @param env бін для отримання змінних із application.yml
      * @param requestParamMapper бін для співставлення звернень до API
      * @param restTemplate бін для отримання даних за допомогою URL-адреси
      */
@@ -699,8 +710,8 @@ public class FilmService {
                 logger.error("Значення основного параметру (назва фільму) не може бути порожньою");
                 throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Значення основного параметру (назва фільму) не може бути порожньою"));
             } else if (idPresented && idIsEmpty) {
-                logger.error("Значення основного параметру (IMDb ID) не може бути порожньою");
-                throw new FilmServiceException(exceptionMessageBadInput, new RequestParamsConflictException("Значення основного параметру (IMDb ID) не може бути порожньою"));
+                logger.error("Значення основного параметру (IMDb ID) не може бути порожнім");
+                throw new FilmServiceException(exceptionMessageBadInput, new RequestParamsConflictException("Значення основного параметру (IMDb ID) не може бути порожнім"));
             }
 
             // непорожність назви фільму говорить про його існування (not null)
@@ -804,11 +815,23 @@ public class FilmService {
      * у собі DTO запиту. Працює в асинхронному режимі.
      * @param dto об'єкт для передачі даних про запит
      * @return документ
-     * @throws FilmServiceException якщо станеться внутрішня помилка додатку
-     *         через непідтримку певних розширень, невдач отримання даних
      */
     @Async("threadPoolTaskExecutor")
-    public CompletableFuture<XWPFDocument> getDocument(final GetFilmDataRequest dto) throws FilmServiceException {
+    public CompletableFuture<XWPFDocument> getDocument(final GetFilmDataRequest dto) {
+        try {
+            return getDocument0(dto);
+        } catch (FilmServiceException e) {
+            XWPFDocument document = new XWPFDocument();
+            XWPFParagraph paragraph = document.createParagraph();
+            XWPFRun run = paragraph.createRun();
+            run.setText(e.getMessage());
+            return CompletableFuture.completedFuture(document);
+        }
+    }
+
+    // використовується для спроби отримати документ, яка може бути невдалою
+    // через виняткові ситуації
+    private CompletableFuture<XWPFDocument> getDocument0(final GetFilmDataRequest dto) throws FilmServiceException {
         String json;
         try {
             json = restTemplate.getForObject(getURL(dto), String.class);
@@ -878,7 +901,7 @@ public class FilmService {
                     try {
                         ctrow = CTRow.Factory.parse(lastRow.getCtRow().newInputStream());
                     } catch (XmlException | IOException e) {
-
+                        logger.log(Level.ERROR, "Не вдалося здійснити XML-парсинг рядка таблиці із рейтингами");
                         throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
                     }
                     XWPFTableRow newRow = new XWPFTableRow(ctrow, tableWithRatings);
@@ -932,8 +955,6 @@ public class FilmService {
                     throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
                 }
             }
-
-
 
             return CompletableFuture.completedFuture(document);
         } else {
