@@ -117,16 +117,16 @@ public class ImageDTO {
     }
 
     /**
-     * Повертає назву файла.
-     * @return назва файла
+     * Повертає назву файлу.
+     * @return назва файлу
      */
     public String getFilename() {
         return filename;
     }
 
     /**
-     * Встановлює назву файла.
-     * @param filename назва файла
+     * Встановлює назву файлу.
+     * @param filename назва файлу
      */
     public void setFilename(final String filename) {
         this.filename = filename;

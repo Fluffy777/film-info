@@ -42,7 +42,7 @@ public class FilmController {
     private final FilmService service;
 
     /**
-     * Бін, необхідний для отримання налаштувань із application.properties.
+     * Бін, необхідний для отримання налаштувань із application.yml.
      */
     private final Environment env;
 
@@ -113,7 +113,7 @@ public class FilmController {
         resultDocumentMimeType = env.getProperty("application.result-document.mime-type");
         resultDocumentMimeSubtype = env.getProperty("application.result-document.mime-subtype");
         resultDocumentFilename = env.getProperty("application.result-document.filename");
-        logger.debug("Бін REST-контролера FilmController створений");
+        logger.debug("Бін REST-контролера " + getClass().getSimpleName() + " створений");
     }
 
     /**
@@ -146,12 +146,12 @@ public class FilmController {
         CompletableFuture<String> futureBody = service.getRequestBody(
                 new GetFilmDataRequest(title, year, plot, id, format));
         CompletableFuture.allOf(futureBody).join();
-        logger.info(String.format("Запит на отримання інформації про фільм у форматі %s опрацьований", format));
+        logger.info(String.format("Запит на отримання інформації про фільм у форматі %s опрацьований", (format != null) ? format : env.getProperty("application.response-data-format.json")));
 
         ++cacheResponseBodiesCounter;
         return ResponseEntity
                 .ok()
-                .contentType(format.equals(env.getProperty("application.response-data-format.json")) ? MediaType.APPLICATION_JSON : MediaType.APPLICATION_XML)
+                .contentType(format == null || format.isEmpty() || format.equals(env.getProperty("application.response-data-format.json")) ? MediaType.APPLICATION_JSON : MediaType.APPLICATION_XML)
                 .body(futureBody.get());
     }
 

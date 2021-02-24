@@ -3,16 +3,12 @@ package com.fluffy.services;
 import com.fluffy.dtos.FilmDTO;
 import com.fluffy.dtos.GetFilmDataRequest;
 import com.fluffy.dtos.ImageDTO;
-import com.fluffy.exceptions.BadPosterExtensionException;
-import com.fluffy.exceptions.FilmServiceException;
-import com.fluffy.exceptions.NoDataFoundException;
-import com.fluffy.exceptions.RedundantRequestParamException;
-import com.fluffy.exceptions.RequestParamInvalidValueException;
-import com.fluffy.exceptions.RequestParamOmitedException;
-import com.fluffy.exceptions.RequestParamsConflictException;
+import com.fluffy.exceptions.*;
 import com.fluffy.util.RequestParamMapper;
 import com.fluffy.util.URLBuilder;
 import com.fluffy.util.XWPFDocumentManipulator;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
 import org.apache.poi.util.IOUtils;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFTable;
@@ -31,11 +27,7 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URISyntaxException;
 import java.util.Calendar;
 import java.util.HashMap;
@@ -50,6 +42,11 @@ import java.util.concurrent.CompletableFuture;
  */
 @Service
 public class FilmService {
+    /**
+     * Для забезпечення логування.
+     */
+    private static final Logger logger = Logger.getLogger(FilmService.class);
+
     /**
      * Протокол для отримання даних від джерела.
      */
@@ -403,7 +400,7 @@ public class FilmService {
     private final String posterName;
 
     /**
-     * Назва файла, що замінює постер на випадок його відсутності.
+     * Назва файлу, що замінює постер на випадок його відсутності.
      */
     private final String noPosterImage;
 
@@ -442,7 +439,7 @@ public class FilmService {
 
     /**
      * Бін, що використовується для отримання змінних оточення, визначених у
-     * application.properties.
+     * application.yml.
      */
     private final Environment env;
 
@@ -573,6 +570,8 @@ public class FilmService {
         exceptionMessageNoDataFound = env.getProperty("application.exception-message.no-data-found");
         exceptionMessageApplicationInnerException = env.getProperty("application.exception-message.application-inner-exception");
         exceptionMessageBadPosterExtension = env.getProperty("application.exception-message.bad-poster-extension");
+
+        logger.debug("Бін сервісу " + getClass().getSimpleName() + " створений");
     }
 
     private String getString(final JSONObject obj, final String key, final String defaultValue) {
@@ -602,6 +601,7 @@ public class FilmService {
             response = getString(obj, jsonKeyResponse, jsonValueBadResponse);
         } catch (JSONException e) {
             response = jsonValueBadResponse;
+            logger.log(Level.WARN, "Не вдалося здійснити парсинг отриманої JSON-відповіді", e);
         }
         FilmDTO filmDTO = new FilmDTO();
         filmDTO.setResponse(response);
@@ -632,6 +632,7 @@ public class FilmService {
             filmDTO.setMetascore(getString(obj, jsonKeyMetascore));
             filmDTO.setImdbRating(getString(obj, jsonKeyImdbRating));
             filmDTO.setImdbVotes(getString(obj, jsonKeyImdbVotes));
+            logger.debug("Отримання основних даних із JSON-відповіді завершено");
 
             // перевіряється, чи містить JSON-об'єкт дані про рейтинги на
             // різноманітних ресурсах
@@ -650,6 +651,7 @@ public class FilmService {
                     ratings.put(String.valueOf(index), currentMap);
                 }
                 filmDTO.setRatings(ratings);
+                logger.debug("JSON-відповідь мала в наявності дані про рейтинги - вони були опрацьовані");
             }
         }
 
@@ -685,21 +687,25 @@ public class FilmService {
         boolean titleIsEmpty = titlePresented && (title.isEmpty());
         boolean idIsEmpty = idPresented && (id.isEmpty());
         if (!titlePresented && !idPresented) {
+            logger.error("Назва фільму або його IMDb ID повинен бути вказаний");
             throw new FilmServiceException(exceptionMessageBadInput, new RequestParamOmitedException("Назва фільму або його IMDb ID повинен бути вказаний"));
         } else if (titlePresented && idPresented) {
+            logger.error("Конфлікт параметрів: треба вказувати або назву фільму, або його IMDb ID");
             throw new FilmServiceException(exceptionMessageBadInput, new RequestParamsConflictException("Конфлікт параметрів: треба вказувати або назву фільму, або його IMDb ID"));
         } else {
             // якщо назва фільму представлена - вона повинна бути непорожньою;
             // або - заданий IMDb ID, що на цей випадок не може бути порожнім
             if (titlePresented && titleIsEmpty) {
+                logger.error("Значення основного параметру (назва фільму) не може бути порожньою");
                 throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Значення основного параметру (назва фільму) не може бути порожньою"));
             } else if (idPresented && idIsEmpty) {
+                logger.error("Значення основного параметру (IMDb ID) не може бути порожньою");
                 throw new FilmServiceException(exceptionMessageBadInput, new RequestParamsConflictException("Значення основного параметру (IMDb ID) не може бути порожньою"));
             }
 
             // непорожність назви фільму говорить про його існування (not null)
             // та відсутність IMDb ID (null) і навпаки
-            if (!titleIsEmpty) {
+            if (titlePresented) {
                 urlb.addParameter(dataSourceQueryKeyTitle, title);
             } else {
                 urlb.addParameter(dataSourceQueryKeyId, id);
@@ -719,12 +725,14 @@ public class FilmService {
                     try {
                         urlb.addParameter(dataSourceQueryKeyYear, Integer.parseInt(year));
                     } catch (NumberFormatException e) {
+                        logger.error("Некоректне значення параметра року випуску фільму");
                         throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Некоректне значення параметра року випуску фільму"));
                     }
                 } else {
                     // назва фільму виявилася порожньою, отже - її і не
                     // існувало - отже, здійснюється запит за IMDb, для якого
                     // вказання року є непотрібним
+                    logger.error("Вказаний рік випуску фільму є надлишковим параметром для запиту за IMDb ID");
                     throw new FilmServiceException(exceptionMessageBadInput, new RedundantRequestParamException("Вказаний рік випуску фільму є надлишковим параметром для запиту за IMDb ID"));
                 }
             }
@@ -739,6 +747,7 @@ public class FilmService {
                 if (requestParamMapper.isParameterValueValid(applicationQueryKeyPlot, plot)) {
                     urlb.addParameter(dataSourceQueryKeyPlot, plot);
                 } else {
+                    logger.error("Некоректне значення параметра, що відповідає за режим відображення сюжету");
                     throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Некоректне значення параметра, що відповідає за режим відображення сюжету"));
                 }
             } else {
@@ -756,6 +765,7 @@ public class FilmService {
                 if (requestParamMapper.isParameterValueValid(applicationQueryKeyFormat, format)) {
                     urlb.addParameter(dataSourceQueryKeyFormat, format);
                 } else {
+                    logger.error("Некоректне значення параметра, що відповідає за формат відповіді");
                     throw new FilmServiceException(exceptionMessageBadInput, new RequestParamInvalidValueException("Некоректне значення параметра, що відповідає за формат відповіді"));
                 }
             } else {
@@ -767,7 +777,10 @@ public class FilmService {
         // встановлення використовуванного ключу до API для можливості
         // використання джерела даних
         urlb.addParameter(dataSourceQueryKeyApiKey, dataSourceApiKey);
-        return urlb.toString();
+
+        String result = urlb.toString();
+        logger.debug("Побудований URL: " + result);
+        return result;
     }
 
     /**
@@ -781,6 +794,7 @@ public class FilmService {
         try {
             return CompletableFuture.completedFuture(restTemplate.getForObject(getURL(dto), String.class));
         } catch (RestClientException e) {
+            logger.log(Level.ERROR, "Не вдалося отримати дані від джерела", e);
             throw new FilmServiceException(exceptionMessageDataGatheringFailed, e);
         }
     }
@@ -790,7 +804,8 @@ public class FilmService {
      * у собі DTO запиту. Працює в асинхронному режимі.
      * @param dto об'єкт для передачі даних про запит
      * @return документ
-     * @throws FilmServiceException
+     * @throws FilmServiceException якщо станеться внутрішня помилка додатку
+     *         через непідтримку певних розширень, невдач отримання даних
      */
     @Async("threadPoolTaskExecutor")
     public CompletableFuture<XWPFDocument> getDocument(final GetFilmDataRequest dto) throws FilmServiceException {
@@ -798,6 +813,7 @@ public class FilmService {
         try {
             json = restTemplate.getForObject(getURL(dto), String.class);
         } catch (RestClientException e) {
+            logger.log(Level.ERROR, "Не вдалося отримати дані від джерела для заповнення документа", e);
             throw new FilmServiceException(exceptionMessageDataGatheringFailed, e);
         }
 
@@ -809,12 +825,14 @@ public class FilmService {
             try {
                 file = new File(getClass().getClassLoader().getResource(templateFilename).toURI());
             } catch (NullPointerException | URISyntaxException e) {
+                logger.log(Level.ERROR, "Не вдалося знайти файл шаблону документа", e);
                 throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
             }
             XWPFDocument document;
             try {
                 document = new XWPFDocument(new FileInputStream(file));
             } catch (IOException e) {
+                logger.log(Level.ERROR, "Не вдалося відкрити для читання файл шаблону документа", e);
                 throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
             }
 
@@ -844,10 +862,12 @@ public class FilmService {
             map.put(docxFieldAuthor, applicationName);
             map.put(docxFieldCurrentYear, String.valueOf((Calendar.getInstance().get(Calendar.YEAR))));
             XWPFDocumentManipulator.bindFields(document, map);
+            logger.info("Документ заповнений отриманими із JSON-об'єкта значеннями");
 
             // заповнення даних про рейтинги, якщо вони наявні
             Map<String, Map<String, String>> ratings = filmDTO.getRatings();
             if (ratings != null && ratings.size() > 0) {
+                logger.debug("Дані про фільм містять рейтинги, вони будуть використані для заповнення шаблона");
                 XWPFTable tableWithRatings = XWPFDocumentManipulator.getTableWithContent(document, ratingsTableAnchor);
                 int size = tableWithRatings.getRows().size();
                 Set<String> keys = ratings.keySet();
@@ -858,6 +878,7 @@ public class FilmService {
                     try {
                         ctrow = CTRow.Factory.parse(lastRow.getCtRow().newInputStream());
                     } catch (XmlException | IOException e) {
+
                         throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
                     }
                     XWPFTableRow newRow = new XWPFTableRow(ctrow, tableWithRatings);
@@ -873,44 +894,50 @@ public class FilmService {
                     newRow.getCell(1).setText(sourceEntry.get(jsonRatingSourceKeyValue));
                     tableWithRatings.addRow(newRow, size++);
                 }
+                logger.debug("Шаблон документа заповнений даними про рейтинги");
             }
 
             String poster = filmDTO.getPoster();
-            byte[] data;
+            byte[] data = null;
+            String formatName;
 
             // отримання даних про зображення: якщо не буде наявний постер, тоді
             // буде використано зображення за замовчуванням замість нього
-            if (poster != null) {
+            if (poster != null && imageFormatMapper.containsKey(formatName = poster.substring(poster.lastIndexOf('.') + 1))) {
                 try {
                     data = restTemplate.getForObject(poster, byte[].class);
                 } catch (RestClientException e) {
+                    logger.log(Level.WARN, "Не вдалося отримати файл зображення постера під час завантаження", e);
                     throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
                 }
-            } else {
+            } else if (imageFormatMapper.containsKey(formatName = noPosterImage.substring(noPosterImage.lastIndexOf('.') + 1))) {
                 try (FileInputStream fis = new FileInputStream(new File(getClass().getClassLoader().getResource(noPosterImage).toURI()))) {
                     data = IOUtils.toByteArray(fis);
                 } catch (NullPointerException | URISyntaxException | IOException e) {
+                    logger.log(Level.WARN, "Не вдалося отримати файл зображення постера під час використання локального файлу", e);
                     throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
                 }
-                poster = noPosterImage;
             }
 
-            // спрощена перевірка наявності підтримки розширення файла
-            String formatName = poster.substring(poster.lastIndexOf('.') + 1);
-            if (!imageFormatMapper.containsKey(formatName)) {
-                throw new FilmServiceException(exceptionMessageApplicationInnerException, new BadPosterExtensionException(exceptionMessageBadPosterExtension));
+            if (data == null) {
+                logger.warn("Вказаний формат постера не підтримується. Повернення документа відбудеться");
+            } else {
+                try (InputStream io = new ByteArrayInputStream(data)) {
+                    BufferedImage bufferedImage = ImageIO.read(io);
+                    ImageDTO imageDTO = new ImageDTO(data, bufferedImage.getWidth(), bufferedImage.getHeight(), imageFormatMapper.get(formatName), posterName);
+                    XWPFDocumentManipulator.bindImageToField(document, docxFieldPoster, imageDTO);
+                    logger.info("У документ було додано зображення-постер");
+                } catch (IOException e) {
+                    logger.log(Level.ERROR, "Не вдалося додати зображення-постер до документа", e);
+                    throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
+                }
             }
 
-            try (InputStream io = new ByteArrayInputStream(data)) {
-                BufferedImage bufferedImage = ImageIO.read(io);
-                ImageDTO imageDTO = new ImageDTO(data, bufferedImage.getWidth(), bufferedImage.getHeight(), imageFormatMapper.get(formatName), posterName);
-                XWPFDocumentManipulator.bindImageToField(document, docxFieldPoster, imageDTO);
-            } catch (IOException e) {
-                throw new FilmServiceException(exceptionMessageApplicationInnerException, e);
-            }
+
 
             return CompletableFuture.completedFuture(document);
         } else {
+            logger.error("Не вдалося отримати дані для відображення");
             throw new FilmServiceException(exceptionMessageDataGatheringFailed, new NoDataFoundException(exceptionMessageNoDataFound));
         }
     }
